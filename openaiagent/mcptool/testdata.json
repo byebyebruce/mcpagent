@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "calc-mcp": {
+      "disabled": false,
+      "timeout": 60,
+      "type": "stdio",
+      "command": "ls"
+    },
+    "calc-sse": {
+      "autoApprove": [],
+      "disabled": false,
+      "timeout": 60,
+      "type": "sse",
+      "url": "http://127.0.0.1:9981/sse"
+    }
+  }
+}

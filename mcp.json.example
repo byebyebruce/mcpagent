@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "file-server": {
+      "disabled": true,
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/tmp"
+      ]
+    },
+    "calc-sse": {
+      "disabled": true,
+      "type": "sse",
+      "url": "http://127.0.0.1:9981/sse"
+    }
+  },
+  "enableBuiltIn": true
+}
