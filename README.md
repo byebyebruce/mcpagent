@@ -5,6 +5,7 @@
 go build .
 ```
 ## 准备
+`注意：本MCP Host是基于OpenAI ToolCall实现的，并不是用特定提示词实现的，所以只支持OpenAI(其他的Gemini、Claude可能不支持。siliconflow支持function调用是支持的)`
 1. 设置OpenAI环境变量 或者 cp `.env.exmple` to `.env` 修改里面配置
 2. 修改mcp server 配置 cp `mcp.json.example' to `mcp.json` 修改里面配置
 
