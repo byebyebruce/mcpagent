@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/byebyebruce/mcpagent/openaiagent"
+	"github.com/byebyebruce/mcpagent/openaiagent/history"
 	"github.com/byebyebruce/mcpagent/openaiagent/mcptool"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -48,29 +49,31 @@ func AgentMCPServer(openAIClient *openai.Client, mt *mcptool.MCPTool, systemProm
 
 			slog.Info("Running agent with task", "task", task, "maxStep", maxStep)
 
-			agent := openaiagent.NewAgent(openAIClient, systemPrompt, mt, model, 10)
+			agent := openaiagent.NewAgent(openAIClient, systemPrompt, mt, model)
 
-			resp, calls, err := agent.Chat(ctx, task, nil, nil, func(text string) {
+			his := history.NewHistory()
+			resp, calls, err := agent.Chat(ctx, task, his, nil, nil, func(text string) {
 				//slog.Info(text)
 			})
 			if err != nil {
 				return nil, fmt.Errorf("Error in agent chat: %w", err)
 			}
-			agent.AddMessage(task, "", nil, nil)
+			his.AddMessage(task, "", nil, nil)
 			for i := 0; i < maxStep; i++ {
 				if len(calls) == 0 {
 					slog.Info("No tool calls, returning response", "response", resp)
 					return mcp.NewToolResultText(resp), nil
 				}
-				results, err := agent.Call(ctx, calls, func(call openai.ToolCall, result string) {
+				results, err := agent.Call(ctx, calls, func(call openai.ToolCall) {
 					//fmt.Println("Tool call", call.Function.Name, result)
-					slog.Info("Calling", "tool", call.Function.Name, "arguments", call.Function.Arguments, "result", result)
-				})
+					slog.Info("Calling", "tool", call.Function.Name, "arguments", call.Function.Arguments)
+				}, nil)
 				if err != nil {
 					slog.Info("Error in agent call", "error", err)
 				}
-				agent.AddMessage("", "", calls, results)
-				resp, calls, err = agent.Chat(ctx, "", nil, nil, func(text string) {
+				his.AddMessage("", "", calls, results)
+
+				resp, calls, err = agent.Chat(ctx, "", his, nil, nil, func(text string) {
 					fmt.Print(text)
 				})
 				if err != nil {

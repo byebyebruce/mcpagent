@@ -18,11 +18,13 @@ import (
 type MCPConfig struct {
 	MCPServers    map[string]MCPServerConfig `json:"mcpServers"`
 	EnableBuiltIn *bool                      `json:"enableBuiltIn"` // Enable built-in tools
+	TimeoutSecond int                        `json:"timeoutSecond,omitempty"`
 }
 
 type MCPTool struct {
 	client map[string]*client.Client
 	tools  []openai.Tool
+	cfg    MCPConfig
 }
 
 func NewMcpToolLoadConfig(file string) (*MCPTool, error) {
@@ -39,11 +41,17 @@ func NewMcpToolLoadConfig(file string) (*MCPTool, error) {
 }
 
 func NewMcpTool(cfg MCPConfig) (*MCPTool, error) {
+	return NewMcpToolWithInprocessClients(cfg, nil)
+}
+func NewMcpToolWithInprocessClients(cfg MCPConfig, mcpClients map[string]*client.Client) (*MCPTool, error) {
+	if cfg.TimeoutSecond == 0 {
+		cfg.TimeoutSecond = 40
+	}
 	clients, err := CreateMCPClients(cfg.MCPServers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP clients: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(cfg.TimeoutSecond))
 	defer cancel()
 	var (
 		eg, egCtx = errgroup.WithContext(ctx)
@@ -57,6 +65,10 @@ func NewMcpTool(cfg MCPConfig) (*MCPTool, error) {
 			clients[name] = client
 		}
 	}
+	for name, client := range mcpClients {
+		clients[name] = client
+	}
+
 	for _name, _client := range clients {
 		name := _name
 		mcpClient := _client
@@ -85,6 +97,7 @@ func NewMcpTool(cfg MCPConfig) (*MCPTool, error) {
 	return &MCPTool{
 		client: clients,
 		tools:  tools,
+		cfg:    cfg,
 	}, nil
 }
 
@@ -105,6 +118,7 @@ func (m *MCPTool) Call(ctx context.Context, name, args string) (string, error) {
 		return "", fmt.Errorf("failed to unmarshal arguments: %w", err)
 	}
 
+	ctx, _ = context.WithTimeout(ctx, time.Second*time.Duration(m.cfg.TimeoutSecond))
 	result, err := client.CallTool(ctx, request)
 	if err != nil {
 		return "", fmt.Errorf("failed to call tool %s: %w", name, err)

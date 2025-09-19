@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/byebyebruce/mcpagent/openaiagent"
+	"github.com/byebyebruce/mcpagent/openaiagent/history"
 	"github.com/byebyebruce/mcpagent/openaiagent/mcptool"
+
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 	"github.com/sashabaranov/go-openai"
@@ -32,9 +35,8 @@ func CLI(openAIClient *openai.Client, model string) *cobra.Command {
 		if err != nil {
 			panic(err)
 		}
-		agent := openaiagent.NewAgent(openAIClient, *systemPrompt, mt, model, 10)
+		agent := openaiagent.NewAgent(openAIClient, *systemPrompt, mt, model)
 
-		ctx := context.Background()
 		reader := bufio.NewReader(os.Stdin)
 		interactMode := true
 		if len(*input) > 0 {
@@ -44,6 +46,7 @@ func CLI(openAIClient *openai.Client, model string) *cobra.Command {
 		} else {
 			fmt.Println("Enter your prompt (or type 'exit' to quit):")
 		}
+		his := history.NewHistory()
 		for loop := true; loop; {
 			if !interactMode {
 				loop = false
@@ -56,53 +59,22 @@ func CLI(openAIClient *openai.Client, model string) *cobra.Command {
 				break
 			}
 			color.Blue("Assistant:")
-			resp, calls, err := agent.Chat(ctx, input, nil, nil, func(text string) {
-				fmt.Print(text)
-			})
-			if err != nil {
-				color.Red("Error:", err.Error())
-				continue
-			}
-			if len(calls) == 0 {
-				fmt.Println()
-				agent.AddMessage(input, resp, nil, nil)
-				continue
-			}
-			agent.AddMessage(input, "", nil, nil)
-			maxRounds := 10
-		LOOP:
-			for i := 0; i < maxRounds && len(calls) > 0; i++ {
-				//fmt.Println("Tool calls detected:")
-				for _, tool := range calls {
-					fmt.Println("Tool:", tool.Function.Name, "Arguments:", tool.Function.Arguments)
-				}
-				if !*autoAllowTool {
-					confirm, _ := choose("Do you want to allow these tool calls?", "Yes", "No")
-					if confirm != "Yes" {
-						//fmt.Println("Tool calls not allowed, exiting.")
-						break LOOP
-					}
-				}
-
-				//fmt.Println("Result:")
-				results, err := agent.Call(ctx, calls, func(call openai.ToolCall, result string) {
-					//fmt.Println("Tool call", call.Function.Name, result)
-					color.Green("Calling %s", call.Function.Name)
-				})
-				if err != nil {
-					color.Red("Error: %s", err.Error())
-				}
-				agent.AddMessage("", "", calls, results)
-
-				resp, calls, err = agent.Chat(ctx, "", nil, nil, func(text string) {
+			ctx, _ := context.WithTimeout(context.Background(), 2*time.Minute)
+			_, err = openaiagent.Loop(ctx, agent, his, input, 10,
+				func(call openai.ToolCall) {
+					fmt.Println("Tool call", call.Function.Name, call.Function.Arguments)
+				},
+				func(call openai.ToolCall, result string, err error) {
+					fmt.Println("Tool result", call.Function.Name, result)
+				},
+				func(text string) {
 					fmt.Print(text)
 				})
-				if err != nil {
-					color.Red("Error:", err.Error())
-					break LOOP
-				}
+			fmt.Println()
+			if err != nil {
+				color.Red("Error: %v", err.Error())
+				continue
 			}
-			agent.AddMessage("", resp, nil, nil)
 		}
 	}
 	return c

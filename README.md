@@ -1,5 +1,6 @@
 # MCP Agent
-
+## 简介
+MCP Agent是一个基于MCP的Agent框架，支持OpenAI ToolCall，能够调用MCP Server提供的各种功能。
 ## 编译
 ```bash
 go build .
