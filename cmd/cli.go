@@ -46,7 +46,7 @@ func CLI(openAIClient *openai.Client, model string) *cobra.Command {
 		} else {
 			fmt.Println("Enter your prompt (or type 'exit' to quit):")
 		}
-		his := history.NewHistory()
+		his := history.NewHistory(10)
 		for loop := true; loop; {
 			if !interactMode {
 				loop = false
@@ -60,9 +60,17 @@ func CLI(openAIClient *openai.Client, model string) *cobra.Command {
 			}
 			color.Blue("Assistant:")
 			ctx, _ := context.WithTimeout(context.Background(), 2*time.Minute)
+			his.TrimHistory()
 			_, err = openaiagent.Loop(ctx, agent, his, input, 10,
-				func(call openai.ToolCall) {
+				func(call openai.ToolCall) bool {
 					fmt.Println("Tool call", call.Function.Name, call.Function.Arguments)
+					if !*autoAllowTool {
+						confirm, _ := choose("Do you want to allow this tool call?", "Yes", "No")
+						if confirm != "Yes" {
+							return false
+						}
+					}
+					return true
 				},
 				func(call openai.ToolCall, result string, err error) {
 					fmt.Println("Tool result", call.Function.Name, result)

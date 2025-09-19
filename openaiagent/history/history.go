@@ -37,8 +37,8 @@ type History struct {
 	store      Store
 }
 
-func NewHistory() *History {
-	return NewHistoryWithStore(20, &Memory{})
+func NewHistory(n int) *History {
+	return NewHistoryWithStore(n, &Memory{})
 }
 
 func NewHistoryWithStore(maxHistory int, store Store) *History {
@@ -119,12 +119,11 @@ func (a *History) TrimHistory() {
 				}
 			}
 		}
-		i := 0
-		for ; i < len(msgs); i++ {
-			if msgs[i].Role != openai.ChatMessageRoleTool {
-				msgs = msgs[i:]
-				return
+		for len(msgs) > 0 {
+			if msgs[0].Role != openai.ChatMessageRoleTool {
+				break
 			}
+			msgs = msgs[1:] // remove tool call
 		}
 	}
 }

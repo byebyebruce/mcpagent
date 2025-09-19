@@ -51,7 +51,7 @@ func AgentMCPServer(openAIClient *openai.Client, mt *mcptool.MCPTool, systemProm
 
 			agent := openaiagent.NewAgent(openAIClient, systemPrompt, mt, model)
 
-			his := history.NewHistory()
+			his := history.NewHistory(20)
 			resp, calls, err := agent.Chat(ctx, task, his, nil, nil, func(text string) {
 				//slog.Info(text)
 			})
@@ -64,9 +64,10 @@ func AgentMCPServer(openAIClient *openai.Client, mt *mcptool.MCPTool, systemProm
 					slog.Info("No tool calls, returning response", "response", resp)
 					return mcp.NewToolResultText(resp), nil
 				}
-				results, err := agent.Call(ctx, calls, func(call openai.ToolCall) {
+				results, err := agent.Call(ctx, calls, func(call openai.ToolCall) bool {
 					//fmt.Println("Tool call", call.Function.Name, result)
 					slog.Info("Calling", "tool", call.Function.Name, "arguments", call.Function.Arguments)
+					return true
 				}, nil)
 				if err != nil {
 					slog.Info("Error in agent call", "error", err)

@@ -64,8 +64,10 @@ func (a *Agent) Chat(ctx context.Context, input string, his *history.History, ca
 	return ChatStream(ctx, a.llmClient, req, onStream)
 }
 
-type OnCallFunc func(call openai.ToolCall)
+type OnCallFunc func(call openai.ToolCall) bool
 type OnResultFunc func(call openai.ToolCall, result string, err error)
+
+var ErrToolCallCanceled = errors.New("tool call canceled")
 
 func (a *Agent) Call(ctx context.Context, calls []openai.ToolCall, onCall OnCallFunc, onResult OnResultFunc) ([]string, error) {
 	results := make([]string, 0, len(calls))
@@ -75,7 +77,11 @@ func (a *Agent) Call(ctx context.Context, calls []openai.ToolCall, onCall OnCall
 			continue
 		}
 		if onCall != nil {
-			onCall(call)
+			if !onCall(call) {
+				result := "Tool call canceled"
+				results = append(results, result)
+				return results, ErrToolCallCanceled
+			}
 		}
 		result, err := a.tool.Call(ctx, call.Function.Name, call.Function.Arguments)
 		if err != nil {
