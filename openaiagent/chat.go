@@ -2,7 +2,6 @@ package openaiagent
 
 import (
 	"context"
-	_ "embed"
 	"io"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -15,9 +14,13 @@ func ChatStream(ctx context.Context, llmClient *openai.Client, req openai.ChatCo
 	if err != nil {
 		return "", nil, err
 	}
+	defer resp.Close()
+
 	var (
 		fullText  string
 		toolCalls []openai.ToolCall
+		// 使用 map 来跟踪 Index -> toolCalls 数组位置的映射
+		indexToPos = make(map[int]int)
 	)
 	for {
 		ret, err := resp.Recv()
@@ -28,30 +31,45 @@ func ChatStream(ctx context.Context, llmClient *openai.Client, req openai.ChatCo
 			return "", nil, err
 		}
 
+		if len(ret.Choices) == 0 {
+			continue
+		}
+
 		choice := ret.Choices[0]
 		if len(choice.Delta.ToolCalls) > 0 {
-			// 目前只支持1个函数
-			t := choice.Delta.ToolCalls[0]
-			if len(t.ID) > 0 {
-				tc := openai.ToolCall{
-					ID:       t.ID,
-					Index:    t.Index,
-					Type:     t.Type,
-					Function: t.Function,
+			// 遍历所有 tool calls，而不是只取第一个
+			for _, t := range choice.Delta.ToolCalls {
+				// 如果有 ID，说明是新的 tool call
+				if len(t.ID) > 0 {
+					tc := openai.ToolCall{
+						ID:       t.ID,
+						Index:    t.Index,
+						Type:     t.Type,
+						Function: t.Function,
+					}
+					tc.Function.Arguments = ""
+					pos := len(toolCalls)
+					toolCalls = append(toolCalls, tc)
+					// 记录 Index 到数组位置的映射
+					if t.Index != nil {
+						indexToPos[*t.Index] = pos
+					}
 				}
-				tc.Function.Arguments = ""
-				toolCalls = append(toolCalls, tc)
-			}
-			if t.Index != nil {
-				idx := *t.Index
-				if idx >= 0 && idx < len(toolCalls) {
-					toolCalls[idx].Function.Arguments += t.Function.Arguments
+
+				// 累积 Arguments
+				if t.Index != nil {
+					idx := *t.Index
+					if pos, ok := indexToPos[idx]; ok && pos < len(toolCalls) {
+						toolCalls[pos].Function.Arguments += t.Function.Arguments
+					}
 				}
 			}
 		} else {
-			result := ret.Choices[0].Delta.Content
+			result := choice.Delta.Content
 			fullText += result
-			onStream(result)
+			if onStream != nil {
+				onStream(result)
+			}
 		}
 	}
 	return fullText, toolCalls, nil
